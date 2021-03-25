@@ -21,3 +21,11 @@ include_directories(
 	${catkin_INCLUDE_DIRS}
 	${OpenCV_INCLUDE_DIRS}
 )
+
+add_executable(ScreenColorPeaksNode src/nodes/ScreenColorPeaksNode.cpp src/lib/ScreenColorPeaksManager.cpp)
+target_link_libraries(ScreenColorPeaksNode ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+install(TARGETS
+	ScreenColorPeaksNode
+	RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
