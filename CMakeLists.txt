@@ -22,10 +22,14 @@ include_directories(
 	${OpenCV_INCLUDE_DIRS}
 )
 
+add_executable(CvBridge src/nodes/CvBridge.cpp)
+target_link_libraries(CvBridge ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
 add_executable(ScreenColorPeaksNode src/nodes/ScreenColorPeaksNode.cpp src/lib/ScreenColorPeaksManager.cpp)
 target_link_libraries(ScreenColorPeaksNode ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
 install(TARGETS
+	CvBridge
 	ScreenColorPeaksNode
 	RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
