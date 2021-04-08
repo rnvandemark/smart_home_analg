@@ -1,7 +1,7 @@
 #include "smart_home_analg/ScreenColorPeaksManager.hpp"
 
-#include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
+#include <opencv2/photo.hpp>
 
 namespace smart_home {
 
@@ -52,12 +52,15 @@ bool ScreenManager::screen_calibration_request_callback(
 {
 	bool rc = false;
 	cv_bridge::CvImagePtr cv_img_init;
-	cv_bridge::CvImage cv_img_gray, cv_img_marked;
+	cv_bridge::CvImage cv_img_denoised, cv_img_gray, cv_img_blur, cv_img_featin, cv_img_marked;
 	std::vector<cv::Point2f> corners;
 
 	const int max_corners = req.max_corners > 0 ? req.max_corners : 35;
 	const float quality_level = req.quality_level > 0 ? req.quality_level : 0.01;
-	const float min_dist = req.min_dist > 0 ? req.min_dist : 10;
+	const float min_dist = req.min_dist > 0 ? req.min_dist : 30;
+	const bool do_blur = req.do_blur;
+	const int kh = req.kh > 0 ? req.kh : 3;
+	const int kw = req.kw > 0 ? req.kw : 3;
 
 	if (last_received_frame == nullptr)
 	{
@@ -74,12 +77,30 @@ bool ScreenManager::screen_calibration_request_callback(
 		goto END;
 	}
 
-	cv::cvtColor(cv_img_init->image, cv_img_gray.image, cv::COLOR_BGR2GRAY);
-	cv_img_gray.header = cv_img_init->header;
+	cv::fastNlMeansDenoisingColored(cv_img_init->image, cv_img_denoised.image);
+	cv_img_denoised.header = cv_img_init->header;
+	cv_img_denoised.encoding = cv_img_init->encoding;
+	res.intermediate_images.push_back(*(cv_img_denoised.toImageMsg()));
+
+	cv::cvtColor(cv_img_denoised.image, cv_img_gray.image, cv::COLOR_BGR2GRAY);
+	cv_img_gray.header = cv_img_denoised.header;
 	cv_img_gray.encoding = sensor_msgs::image_encodings::MONO8;
 	res.intermediate_images.push_back(*(cv_img_gray.toImageMsg()));
 
-	cv::goodFeaturesToTrack(cv_img_gray.image, corners, max_corners, quality_level, min_dist);
+	if (do_blur)
+	{
+		cv::blur(cv_img_gray.image, cv_img_blur.image, cv::Size(kw,kh));
+		cv_img_blur.header = cv_img_gray.header;
+		cv_img_blur.encoding = cv_img_gray.encoding;
+		res.intermediate_images.push_back(*(cv_img_blur.toImageMsg()));
+		cv_img_featin = cv_img_blur;
+	}
+	else
+	{
+		cv_img_featin = cv_img_gray;
+	}
+
+	cv::goodFeaturesToTrack(cv_img_featin.image, corners, max_corners, quality_level, min_dist);
 
 	cv_img_marked.image = cv_img_init->image.clone();
 	cv_img_marked.header = cv_img_init->header;

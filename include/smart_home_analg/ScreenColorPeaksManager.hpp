@@ -3,6 +3,7 @@
 
 #include <string>
 #include <ros/ros.h>
+#include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/Image.h>
 #include <smart_home_msgs/Color.h>
 #include <smart_home_msgs/ColorPeaksTelem.h>
