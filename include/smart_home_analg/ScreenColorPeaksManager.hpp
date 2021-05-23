@@ -2,6 +2,7 @@
 #define __SMART_HOME_ANALG_SCREENCOLORPEAKSMANAGER_HPP
 
 #include <string>
+#include <queue>
 #include <ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/Image.h>
@@ -12,14 +13,30 @@
 
 namespace smart_home {
 
+struct ColorPeakWindow
+{
+protected:
+	const static size_t MAX_ELEMS = 10;
+	unsigned int size;
+	unsigned int total_r;
+	unsigned int total_g;
+	unsigned int total_b;
+	std::queue<unsigned char> queue_r;
+	std::queue<unsigned char> queue_g;
+	std::queue<unsigned char> queue_b;
+
+public:
+	void push_and_eval(unsigned char r, unsigned char g, unsigned char b, smart_home_msgs::ColorPtr& color);
+};
+
 class ScreenManager
 {
 protected:
-	const static int WORLD_HEIGHT = 200;
+	const static int WORLD_HEIGHT = 300;
 	const static int WORLD_WIDTH = 400;
 	const static std::vector<cv::Point2f> WORLD_PLANE;
 	const static cv::Size WORLD_SIZE;
-	const static size_t NUM_COLOR_PEAKS_TELEM_IMGS = 3;
+	const static size_t NUM_COLOR_PEAKS_TELEM_IMGS = 2;
 
 	ros::NodeHandle nh;
 	ros::ServiceServer screen_calibration_request_srv;
@@ -37,6 +54,9 @@ protected:
 
 	bool homog_set;
 	cv::Mat homog;
+
+	ColorPeakWindow window_left;
+	ColorPeakWindow window_right;
 
 public:
 	ScreenManager(
