@@ -28,8 +28,17 @@ target_link_libraries(CvBridge ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 add_executable(ScreenColorPeaksNode src/nodes/ScreenColorPeaksNode.cpp src/lib/ScreenColorPeaksManager.cpp)
 target_link_libraries(ScreenColorPeaksNode ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
+add_executable(SfAnalyzer src/nodes/SoundFileHandlerNode.cpp src/lib/SoundHelpers.cpp src/lib/SoundFileManager.cpp)
+target_link_libraries(SfAnalyzer m fftw3 sndfile sfml-audio ${catkin_LIBRARIES})
+
 install(TARGETS
 	CvBridge
 	ScreenColorPeaksNode
+	SfAnalyzer
 	RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(
+  DIRECTORY bin/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/bin
 )
