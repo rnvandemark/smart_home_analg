@@ -68,6 +68,38 @@ struct SfManager::SfPlaybackData
 		current_playback_chunk = -1;
 		pending_playback_chunks.clear();
 	}
+
+	uint8_t getPlaybackStatus()
+	{
+		switch (sound.getStatus())
+		{
+			case sf::SoundSource::Status::Stopped:
+				return smart_home_msgs::PlaybackUpdate::STOPPED;
+			case sf::SoundSource::Status::Playing:
+				return smart_home_msgs::PlaybackUpdate::PLAYING;
+			case sf::SoundSource::Status::Paused:
+				return smart_home_msgs::PlaybackUpdate::PAUSED;
+			default:
+				return smart_home_msgs::PlaybackUpdate::UNKNOWN;
+		}
+	}
+
+	bool isActive(uint8_t playbackStatus)
+	{
+		switch (playbackStatus)
+		{
+			case smart_home_msgs::PlaybackUpdate::PLAYING:
+			case smart_home_msgs::PlaybackUpdate::PAUSED:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	bool isActive()
+	{
+		return isActive(getPlaybackStatus());
+	}
 };
 
 void SfManager::queue_sound_file(const std::string& sf_path)
@@ -147,13 +179,13 @@ void SfManager::pop_next_playback()
 	sfpd->sound.setBuffer(sfpd->sound_buffer);
 
 	// Get the human-friendly name of the sound file
-	std::string current_sf_name = new_path;
+	current_sf_name = new_path;
 	const std::size_t directory = current_sf_name.rfind("/");
-	const std::size_t extension = current_sf_name.rfind(".");
 	if (std::string::npos != directory)
 	{
 		current_sf_name = current_sf_name.substr(directory+1);
 	}
+	const std::size_t extension = current_sf_name.rfind(".");
 	if (std::string::npos != extension)
 	{
 		current_sf_name = current_sf_name.substr(0, extension);
@@ -231,14 +263,16 @@ SfManager::SfManager(
 		const std::string sound_file_path_list_sub_topic,
 		const std::string fft_window_sub_topic,
 		const std::string playback_command_sub_topic,
-		const std::string playback_frequencies_pub_topic
+		const std::string playback_frequencies_pub_topic,
+		const std::string playback_updates_pub_topic
 ) :
 		root_dir(root_dir),
 		max_num_freqs(max_num_freqs),
 		current_fft_window(init_fft_window),
 		ready(false),
 		sfpd(new SfPlaybackData),
-		playback_frequencies_msg(new smart_home_msgs::Float32Arr)
+		playback_frequencies_msg(new smart_home_msgs::Float32Arr),
+		playback_updates_msg(new smart_home_msgs::PlaybackUpdate)
 {
 	assert(max_num_freqs > 0);
 	sound_file_path_sub = nh.subscribe(
@@ -269,7 +303,20 @@ SfManager::SfManager(
 		playback_frequencies_pub_topic,
 		10
 	);
+	playback_updates_pub = nh.advertise<smart_home_msgs::PlaybackUpdate>(
+		playback_updates_pub_topic,
+		10
+	);
 	calc_frequencies_tmr = INST_CALC_FREQ_TMR();
+
+	send_playback_update_tmr = nh.createTimer(
+		ros::Duration(0.2),
+		&smart_home::SfManager::send_playback_update_callback,
+		this,
+		false,
+		true
+	);
+	send_playback_update_tmr.start();
 
 	ROS_INFO("Initialized SoundFileAnalyzer.");
 }
@@ -344,6 +391,24 @@ void SfManager::calc_frequencies_callback(const ros::TimerEvent& evt)
 		evt.current_real.toSec() - evt.current_expected.toSec(),
 		ros::Time::now().toSec() - start
 	);
+}
+
+void SfManager::send_playback_update_callback(const ros::TimerEvent& evt)
+{
+	playback_updates_msg->status = sfpd->getPlaybackStatus();
+	if (sfpd->isActive(playback_updates_msg->status))
+	{
+		playback_updates_msg->name = current_sf_name;
+		playback_updates_msg->duration_total = ros::Duration(static_cast<double>(sfpd->num_frames) / sfpd->sample_rate);
+		playback_updates_msg->duration_current = ros::Duration(sfpd->sound.getPlayingOffset().asSeconds());
+	}
+	else
+	{
+		playback_updates_msg->name = "";
+		playback_updates_msg->duration_total = ros::Duration(0);
+		playback_updates_msg->duration_current = ros::Duration(0);
+	}
+	playback_updates_pub.publish(playback_updates_msg);
 }
 
 #undef INST_CALC_FREQ_TMR

@@ -10,6 +10,7 @@
 #include <std_msgs/Float32.h>
 #include <smart_home_msgs/StringArr.h>
 #include <smart_home_msgs/PlaybackCommand.h>
+#include <smart_home_msgs/PlaybackUpdate.h>
 #include <smart_home_msgs/Float32Arr.h>
 
 namespace smart_home {
@@ -23,9 +24,12 @@ protected:
 	ros::Subscriber fft_window_sub;
 	ros::Subscriber playback_command_sub;
 	ros::Publisher playback_frequencies_pub;
+	ros::Publisher playback_updates_pub;
 	ros::Timer calc_frequencies_tmr;
+	ros::Timer send_playback_update_tmr;
 
 	smart_home_msgs::Float32ArrPtr playback_frequencies_msg;
+	smart_home_msgs::PlaybackUpdatePtr playback_updates_msg;
 
 	const std::string root_dir;
 	const int max_num_freqs;
@@ -51,7 +55,8 @@ public:
 		const std::string sound_file_path_list_sub_topic,
 		const std::string fft_window_sub_topic,
 		const std::string playback_command_sub_topic,
-		const std::string playback_frequencies_pub_topic
+		const std::string playback_frequencies_pub_topic,
+		const std::string playback_updates_pub_topic
 	);
 	~SfManager();
 
@@ -60,6 +65,7 @@ public:
 	void fft_window_callback(const std_msgs::Float32& msg);
 	void playback_command_callback(const smart_home_msgs::PlaybackCommand& msg);
 	void calc_frequencies_callback(const ros::TimerEvent& evt);
+	void send_playback_update_callback(const ros::TimerEvent& evt);
 };
 
 }
