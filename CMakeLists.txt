@@ -29,7 +29,7 @@ add_executable(ScreenColorPeaksNode src/nodes/ScreenColorPeaksNode.cpp src/lib/S
 target_link_libraries(ScreenColorPeaksNode ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
 add_executable(SfAnalyzer src/nodes/SoundFileHandlerNode.cpp src/lib/SoundHelpers.cpp src/lib/SoundFileManager.cpp)
-target_link_libraries(SfAnalyzer m fftw3 sndfile sfml-audio ${catkin_LIBRARIES})
+target_link_libraries(SfAnalyzer m fftw3 sndfile sfml-audio sfml-system ${catkin_LIBRARIES})
 
 install(TARGETS
 	CvBridge
