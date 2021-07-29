@@ -284,7 +284,7 @@ SfManager::SfManager(
 	sound_file_path_list_sub = nh.subscribe(
 		sound_file_path_list_sub_topic,
 		1,
-		&smart_home::SfManager::sound_file_path_callback,
+		&smart_home::SfManager::sound_file_path_list_callback,
 		this
 	);
 	fft_window_sub = nh.subscribe(
