@@ -39,7 +39,7 @@ namespace smart_home {
 
 #define PLAYBACK_CONTINUE() \
 	PLAYBACK_STOP(); \
-	pop_next_playback()	
+	pop_next_playback()
 
 struct SfManager::SfPlaybackData
 {
