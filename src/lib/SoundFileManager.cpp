@@ -84,7 +84,7 @@ struct SfManager::SfPlaybackData
 		}
 	}
 
-	bool isActive(uint8_t playbackStatus)
+	static bool isActive(uint8_t playbackStatus)
 	{
 		switch (playbackStatus)
 		{
