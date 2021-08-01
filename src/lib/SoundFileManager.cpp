@@ -122,7 +122,7 @@ void SfManager::pop_next_playback()
 	// Get full file path
 	const std::string new_path = queued_sound_file_paths.front();
 	queued_sound_file_paths.pop();
-	sfpd->path = root_dir + "/" + new_path;
+	sfpd->path = new_path;
 
 #define STR_ENDS_WITH(s,sx) (s.size() >= strlen(sx) && 0 == s.compare(s.size()-strlen(sx), strlen(sx), sx))
 
@@ -256,7 +256,6 @@ std::vector<float> SfManager::get_max_freqs(int chunk)
 }
 
 SfManager::SfManager(
-		const std::string root_dir,
 		const int max_num_freqs,
 		const float init_fft_window,
 		const std::string sound_file_path_sub_topic,
@@ -266,7 +265,6 @@ SfManager::SfManager(
 		const std::string playback_frequencies_pub_topic,
 		const std::string playback_updates_pub_topic
 ) :
-		root_dir(root_dir),
 		max_num_freqs(max_num_freqs),
 		current_fft_window(init_fft_window),
 		ready(false),

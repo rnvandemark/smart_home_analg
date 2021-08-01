@@ -31,7 +31,6 @@ protected:
 	smart_home_msgs::Float32ArrPtr playback_frequencies_msg;
 	smart_home_msgs::PlaybackUpdatePtr playback_updates_msg;
 
-	const std::string root_dir;
 	const int max_num_freqs;
 
 	std::queue<std::string> queued_sound_file_paths;
@@ -48,7 +47,6 @@ protected:
 
 public:
 	SfManager(
-		const std::string root_dir,
 		const int max_num_freqs,
 		const float init_fft_window,
 		const std::string sound_file_path_sub_topic,
