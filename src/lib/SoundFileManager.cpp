@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <iterator>
 #include <sndfile.h>
 #include <SFML/Audio.hpp>
 #include <ros/package.h>
@@ -10,7 +11,7 @@ namespace smart_home {
 
 #define INST_CALC_FREQ_TMR() \
 	nh.createTimer( \
-		ros::Duration(current_fft_window), \
+		ros::Duration(current_fft_reeval_period), \
 		&smart_home::SfManager::calc_frequencies_callback, \
 		this, \
 		false, \
@@ -39,7 +40,7 @@ namespace smart_home {
 
 #define PLAYBACK_CONTINUE() \
 	PLAYBACK_STOP(); \
-	pop_next_playback()	
+	pop_next_playback()
 
 struct SfManager::SfPlaybackData
 {
@@ -48,8 +49,7 @@ struct SfManager::SfPlaybackData
 	int num_channels;
 	int sample_rate;
 
-	int current_playback_chunk;
-	std::vector<std::vector<double>> pending_playback_chunks;
+	std::vector<double> pending_playback_frames;
 
 	sf::SoundBuffer sound_buffer;
 	sf::Sound sound;
@@ -65,8 +65,7 @@ struct SfManager::SfPlaybackData
 		num_frames = -1;
 		num_channels = -1;
 		sample_rate = -1;
-		current_playback_chunk = -1;
-		pending_playback_chunks.clear();
+		pending_playback_frames.clear();
 	}
 
 	uint8_t getPlaybackStatus()
@@ -84,7 +83,7 @@ struct SfManager::SfPlaybackData
 		}
 	}
 
-	bool isActive(uint8_t playbackStatus)
+	static bool isActive(uint8_t playbackStatus)
 	{
 		switch (playbackStatus)
 		{
@@ -99,6 +98,16 @@ struct SfManager::SfPlaybackData
 	bool isActive()
 	{
 		return isActive(getPlaybackStatus());
+	}
+
+	ros::Duration duration_total()
+	{
+		return ros::Duration(static_cast<double>(num_frames) / sample_rate);
+	}
+
+	ros::Duration duration_current()
+	{
+		return ros::Duration(sound.getPlayingOffset().asSeconds());
 	}
 };
 
@@ -122,7 +131,7 @@ void SfManager::pop_next_playback()
 	// Get full file path
 	const std::string new_path = queued_sound_file_paths.front();
 	queued_sound_file_paths.pop();
-	sfpd->path = root_dir + "/" + new_path;
+	sfpd->path = new_path;
 
 #define STR_ENDS_WITH(s,sx) (s.size() >= strlen(sx) && 0 == s.compare(s.size()-strlen(sx), strlen(sx), sx))
 
@@ -202,8 +211,8 @@ void SfManager::pop_next_playback()
 	const uint64_t num_all_items = sfpd->num_frames * sfpd->num_channels;
 
 	// Read sound file into buffer
-	std::vector<double> item_buffer(num_all_items);
-	const uint64_t items_read = sf_read_double(file_in, &item_buffer[0], num_all_items);
+	sfpd->pending_playback_frames.resize(num_all_items);
+	const uint64_t items_read = sf_read_double(file_in, &sfpd->pending_playback_frames[0], num_all_items);
 	sf_close(file_in);
 
 	ROS_DEBUG(
@@ -215,50 +224,34 @@ void SfManager::pop_next_playback()
 		items_read
 	);
 
-	// Each chunk has Fs*w items in it (or is the entire sequence if no window size is given)
-	const uint64_t frames_per_std_chunk_per_channel = (current_fft_window <= 0) ? sfpd->num_frames : sfpd->sample_rate * current_fft_window;
-	const uint64_t frames_per_std_chunk = frames_per_std_chunk_per_channel * sfpd->num_channels;
-	// Number of chunks is one less than the total items divided by items per chunk
-	const uint64_t num_std_chunks = (sfpd->num_frames / frames_per_std_chunk_per_channel) - 1;
-	// The remainder of the chunks
-	const uint64_t frames_for_last_chunk = num_all_items - (frames_per_std_chunk * num_std_chunks);
-
-	ROS_DEBUG(
-		"frames_per_std_chunk=%lu, num_std_chunks=%lu, frames_for_last_chunk=%lu",
-		frames_per_std_chunk,
-		num_std_chunks,
-		frames_for_last_chunk
-	);
-
-	// Queue every chunk of data
-	sfpd->pending_playback_chunks.resize(num_std_chunks+1);
-	for (int i = 0; i < sfpd->pending_playback_chunks.size(); i++)
-	{
-		const uint64_t items = (i == num_std_chunks) ? frames_for_last_chunk : frames_per_std_chunk;
-		sfpd->pending_playback_chunks[i] = std::vector<double>(
-			item_buffer.begin() + (i*frames_per_std_chunk),
-			item_buffer.begin() + (i*frames_per_std_chunk) + items
-		);
-	}
-
-	ROS_INFO("Finished queuing playback chunks for '%s'.", sfpd->path.c_str());
+	ROS_INFO("Finished loading playback data for '%s'.", sfpd->path.c_str());
 	PLAYBACK_PREPARE();
 }
 
-std::vector<float> SfManager::get_max_freqs(int chunk)
+int SfManager::get_current_max_freqs(std::vector<float>& output)
 {
 	assert(ready);
-	return get_max_fft_freqs(
-		do_1d_dft(sfpd->pending_playback_chunks[chunk]),
+	const uint64_t total_items = sfpd->sample_rate * sfpd->num_channels;
+	const uint64_t current_frame = total_items * sfpd->duration_current().toSec();
+	const uint64_t window_frames = total_items * current_fft_window;
+	const std::vector<double>::iterator start = sfpd->pending_playback_frames.begin() + current_frame;
+	const std::vector<double>::iterator end = (current_frame + window_frames >= sfpd->pending_playback_frames.size()) ? sfpd->pending_playback_frames.end() : start + window_frames;
+	const std::vector<double> current_chunk(start, end);
+	output = get_max_fft_freqs(
+		do_1d_dft(current_chunk),
 		sfpd->sample_rate,
 		max_num_freqs
+	);
+	const uint64_t reeval_size = total_items * current_fft_reeval_period;
+	return (current_frame <= reeval_size) ? 1 : (
+		(std::distance(start, sfpd->pending_playback_frames.end()) <= reeval_size) ? 2 : 0
 	);
 }
 
 SfManager::SfManager(
-		const std::string root_dir,
 		const int max_num_freqs,
 		const float init_fft_window,
+		const float init_fft_reeval_period,
 		const std::string sound_file_path_sub_topic,
 		const std::string sound_file_path_list_sub_topic,
 		const std::string fft_window_sub_topic,
@@ -266,9 +259,9 @@ SfManager::SfManager(
 		const std::string playback_frequencies_pub_topic,
 		const std::string playback_updates_pub_topic
 ) :
-		root_dir(root_dir),
 		max_num_freqs(max_num_freqs),
 		current_fft_window(init_fft_window),
+		current_fft_reeval_period(init_fft_reeval_period),
 		ready(false),
 		sfpd(new SfPlaybackData),
 		playback_frequencies_msg(new smart_home_msgs::Float32Arr),
@@ -284,7 +277,7 @@ SfManager::SfManager(
 	sound_file_path_list_sub = nh.subscribe(
 		sound_file_path_list_sub_topic,
 		1,
-		&smart_home::SfManager::sound_file_path_callback,
+		&smart_home::SfManager::sound_file_path_list_callback,
 		this
 	);
 	fft_window_sub = nh.subscribe(
@@ -372,22 +365,21 @@ void SfManager::calc_frequencies_callback(const ros::TimerEvent& evt)
 	}
 
 	const double start = ros::Time::now().toSec();
-	playback_frequencies_msg->data = get_max_freqs(++sfpd->current_playback_chunk);
+	const int status = get_current_max_freqs(playback_frequencies_msg->data);
 	playback_frequencies_pub.publish(playback_frequencies_msg);
 
-	if (sfpd->current_playback_chunk == 0)
+	switch (status)
 	{
-		PLAYBACK_PLAY();
-	}
-	else if (sfpd->current_playback_chunk == sfpd->pending_playback_chunks.size()-1)
-	{
-		PLAYBACK_CONTINUE();
+		case 1:
+			PLAYBACK_PLAY();
+			break;
+		case 2:
+			PLAYBACK_CONTINUE();
+			break;
 	}
 
 	ROS_DEBUG(
-		"Callback #%d/%lu is %f seconds behind, took %f seconds.",
-		sfpd->current_playback_chunk,
-		sfpd->pending_playback_chunks.size()-1,
+		"Callback is %f seconds behind, took %f seconds.",
 		evt.current_real.toSec() - evt.current_expected.toSec(),
 		ros::Time::now().toSec() - start
 	);
@@ -399,8 +391,8 @@ void SfManager::send_playback_update_callback(const ros::TimerEvent& evt)
 	if (sfpd->isActive(playback_updates_msg->status))
 	{
 		playback_updates_msg->name = current_sf_name;
-		playback_updates_msg->duration_total = ros::Duration(static_cast<double>(sfpd->num_frames) / sfpd->sample_rate);
-		playback_updates_msg->duration_current = ros::Duration(sfpd->sound.getPlayingOffset().asSeconds());
+		playback_updates_msg->duration_total = sfpd->duration_total();
+		playback_updates_msg->duration_current = sfpd->duration_current();
 	}
 	else
 	{

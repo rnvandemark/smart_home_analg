@@ -31,11 +31,11 @@ protected:
 	smart_home_msgs::Float32ArrPtr playback_frequencies_msg;
 	smart_home_msgs::PlaybackUpdatePtr playback_updates_msg;
 
-	const std::string root_dir;
 	const int max_num_freqs;
 
 	std::queue<std::string> queued_sound_file_paths;
 	float current_fft_window;
+	float current_fft_reeval_period;
 	std::string current_sf_name;
 
 	struct SfPlaybackData; // Forward declare
@@ -44,13 +44,13 @@ protected:
 
 	void queue_sound_file(const std::string& sf_path);
 	void pop_next_playback();
-	std::vector<float> get_max_freqs(int chunk);
+	int get_current_max_freqs(std::vector<float>& output);
 
 public:
 	SfManager(
-		const std::string root_dir,
 		const int max_num_freqs,
 		const float init_fft_window,
+		const float init_fft_reeval_period,
 		const std::string sound_file_path_sub_topic,
 		const std::string sound_file_path_list_sub_topic,
 		const std::string fft_window_sub_topic,
